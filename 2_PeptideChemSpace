@@ -1,0 +1,155 @@
+# Import pandas
+import pandas as pd
+
+df1 = pd.read_csv("DB_peptides_MAP4_2048_New.csv", sep=",")
+
+#Convert column from object to str
+df1['pMIC']= df1['pMIC'].astype(str)
+
+#Remplacing commas by dots
+df1['pMIC'] = df1['pMIC'].replace(',','.', regex=True)
+
+#Convert string column to numeric
+df1['pMIC'] = pd.to_numeric(df1['pMIC'],errors = 'coerce')
+
+#Convert string column to numeric
+df1['long'] = pd.to_numeric(df1['long'],errors = 'coerce')
+
+#Remplacing commas by dots
+df1['long'] = df1['long'].replace(',','.', regex=True)
+
+#Convert string column to numeric
+df1['long'] = pd.to_numeric(df1['long'],errors = 'coerce')
+
+import pickle
+import numpy as np
+import tmap as tm
+import pandas as pd
+import scipy.stats as ss
+from rdkit.Chem import AllChem
+from mhfp.encoder import MHFPEncoder
+from faerun import Faerun
+from collections import Counter
+from matplotlib.colors import ListedColormap
+from matplotlib import pyplot as plt
+
+#Funtion to create TMAP based on: https://tmap.gdb.tools/
+
+def main():
+    """ Main funciton """
+    df2 = df1
+
+    enc = MHFPEncoder(1024)
+    lf = tm.LSHForest(1024, 64)
+
+    fps = []
+    hac = []
+    c_frac = []
+    ring_atom_frac = []
+    largest_ring_size = []
+
+    for i, row in df2.iterrows():
+        if i != 0 and i % 1000 == 0:
+            print(100 * i / len(df2))
+        mol = AllChem.MolFromSmiles(row["SMILES "])
+        atoms = mol.GetAtoms()
+        size = mol.GetNumHeavyAtoms()
+        n_c = 0
+        n_ring_atoms = 0
+        for atom in atoms:
+            if atom.IsInRing():
+                n_ring_atoms += 1
+            if atom.GetSymbol().lower() == "c":
+                n_c += 1
+
+        c_frac.append(n_c / size)
+        ring_atom_frac.append(n_ring_atoms / size)
+        sssr = AllChem.GetSymmSSSR(mol)
+        if len(sssr) > 0:
+            largest_ring_size.append(max([len(s) for s in sssr]))
+        else:
+            largest_ring_size.append(0)
+        hac.append(size)
+        fps.append(tm.VectorUint(enc.encode_mol(mol)))
+
+    lf.batch_add(fps)
+    lf.index()
+
+    lf.store("lf.dat")
+    with open("props.pickle", "wb+") as f:
+        pickle.dump(
+            (hac, c_frac, ring_atom_frac, largest_ring_size),
+            f,
+            protocol=pickle.HIGHEST_PROTOCOL,
+        )
+
+    # lf.restore("lf.dat")
+    # hac, c_frac, ring_atom_frac, largest_ring_size = pickle.load(
+    #     open("props.pickle", "rb")
+    # )
+
+    c_frak_ranked = ss.rankdata(np.array(c_frac) / max(c_frac)) / len(c_frac)
+
+    cfg = tm.LayoutConfiguration()
+    cfg.node_size = 1 / 26
+    cfg.mmm_repeats = 2
+    cfg.sl_extra_scaling_steps = 5
+    cfg.k = 20
+    cfg.sl_scaling_type = tm.RelativeToAvgLength
+    x, y, s, t, _ = tm.layout_from_lsh_forest(lf, cfg)
+
+        
+    df2["SMILES "] = (
+        df2["SMILES "]
+        + '__<a target="_blank" href="https://www.npatlas.org/joomla/index.php/explore/compounds#npaid='
+        + df2["ID"]
+        + '">'
+        + df2["ID"]
+        + "</a>"
+    )
+
+    tab_10 = plt.cm.get_cmap("tab10")
+    colors = [i for i in tab_10.colors]
+    colors[7] = (0.17, 0.24, 0.31)
+    tab_10.colors = tuple(colors)
+
+    f = Faerun(view="front", coords=False)
+    f.add_scatter(
+        "np_atlas",
+        {
+            "x": x,
+            "y": y,
+            "c": [                
+                hac,
+                c_frak_ranked,
+                ring_atom_frac,
+                largest_ring_size,
+                df2["pMIC"],
+                df2["long"],
+            ],
+            "labels": df2["SMILES "],
+        },
+        shader="sphere",
+        point_scale=20.0,
+        max_point_size=50,
+        colormap=["tab10", tab_10, "rainbow", "rainbow", "rainbow", "Blues"],
+        series_title=[
+            "HAC",
+            "C Frac",
+            "Ring Atom Frac",
+            "Largest Ring Size",
+            "pMIC",
+            "long"
+        ],
+        has_legend=True,
+        legend_title="pMIC",
+        
+        
+    )
+    
+    f.add_tree("np_atlas_tree", {"from": s, "to": t}, point_helper="np_atlas")
+    f.plot(template="smiles")
+
+
+if __name__ == "__main__":
+    main()
