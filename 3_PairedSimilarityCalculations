@@ -1,0 +1,91 @@
+# Import pandas
+import pandas as pd
+
+df1 = pd.read_csv("DB_peptides_MAP4_2048_New.csv", sep=",")
+
+# ==============================================================================
+
+#Convert column from object to str
+df1['pMIC']= df1['pMIC'].astype(st
+
+#Remplacing commas by dots
+df1['pMIC'] = df1['pMIC'].replace(',','.', regex=True)
+
+#Convert string column to numeric
+df1['pMIC'] = pd.to_numeric(df1['pMIC'],errors = 'coerce')
+
+df2 = df1[['Fingerprint_MAP4']]
+
+from rdkit import Chem
+import tmap as tm
+from map4 import MAP4Calculator
+
+# Rdkit import for molecular features
+# ==============================================================================
+import rdkit
+import rdkit.Chem
+import rdkit.Chem.Fragments
+import rdkit.Chem.Descriptors
+
+import rdkit.Chem.rdchem
+from rdkit.Chem import AllChem, Draw
+
+from rdkit.Chem import MACCSkeys
+import awkward as ak
+
+#COnditions
+dim = 2048
+
+MAP4 = MAP4Calculator(dimensions=dim)
+ENC = tm.Minhash(dim)
+
+# ==============================================================================
+#testing contions
+smiles_a = 'c1ccccc1'
+mol_a = Chem.MolFromSmiles(smiles_a)
+map4_a = MAP4.calculate(mol_a)
+
+
+smiles_b = 'c1cccc(N)c1'
+mol_b = Chem.MolFromSmiles(smiles_b)
+map4_b = MAP4.calculate(mol_b)
+
+
+print(ENC.get_distance(map4_a, map4_b))
+
+# ==============================================================================
+
+#Calculating FP AMP4
+
+##Note: No runing usign a dataframe aproaches, this is not compatible with similarity of MAP4 calculations
+#FP1 =  pd.DataFrame([[bool(int(y)) for y in [[MAP4.calculate(rdkit.Chem.MolFromSmiles(x))] for x in df1["SMILES "]])
+
+## I suggest use this...
+FP2 =  [MAP4.calculate(rdkit.Chem.MolFromSmiles(x)) for x in df1["SMILES "]]
+
+# ==============================================================================
+
+#Extrat an examples
+molecule_a = FP2[0]
+molecule_b = FP2[1]
+
+#Testing similarity calculations
+print(ENC.get_distance(molecule_a, molecule_b))
+
+
+# ==============================================================================
+# All possible pairs in List
+# Using combinations()
+from itertools import combinations
+  
+# initializing list
+test_list = FP2
+  
+# All possible pairs in List
+# Using combinations()
+FP3 = list(combinations(test_list, 2))
+
+# ==============================================================================
+# optimization with a "for" funtion
+Distances = pd.DataFrame([ENC.get_distance(y[0], y[1]) for y in FP3])
+
