@@ -1,0 +1,5 @@
+#Important notes
+# 1. MAP4 fingerprint and TMAP chemical space visualization must be geenrated in Linux environment.
+# 2. The provided codes were generated in the Python 3 programming language.
+# 3. If any of the codes is useful to you, please cite the following article: https://doi.org/10.26434/chemrxiv-2023-0j38z
+# 4. The tools for calculating the MAP4 fingerprint and its visualization with TMAP were developed by the research group of Dr. Jean-Louis Reymond, please also cite the original source: https://doi.org/10.1186/s13321-020-00445 -4
